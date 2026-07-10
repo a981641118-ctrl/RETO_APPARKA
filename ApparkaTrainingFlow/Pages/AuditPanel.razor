@@ -1,0 +1,22 @@
+@using ApparkaTrainingFlow.Models
+
+<details class="card audit-card">
+    <summary>Ver trazabilidad (@Validation.Audit.Count registros)</summary>
+    <div class="audit-list">
+        @foreach (var item in Validation.Audit.OrderByDescending(x => x.Timestamp))
+        {
+            <div class="audit-row">
+                <span class="audit-dot"></span>
+                <div>
+                    <strong>@item.Action</strong>
+                    <p>@item.Detail</p>
+                    <small>@item.Actor · @item.Timestamp.ToString("dd/MM/yyyy HH:mm:ss")</small>
+                </div>
+            </div>
+        }
+    </div>
+</details>
+
+@code {
+    [Parameter, EditorRequired] public TrainingValidation Validation { get; set; } = default!;
+}

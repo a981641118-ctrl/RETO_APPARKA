@@ -1,0 +1,43 @@
+@page "/perfil"
+@inject TrainingStateService TrainingState
+
+<PageTitle>Perfil | Apparka Training</PageTitle>
+
+<div class="page-shell">
+    <section class="page-header">
+        <p class="eyebrow">CONFIGURACIÓN DEL MVP</p>
+        <h1>Perfil y demostración</h1>
+    </section>
+
+@if (TrainingState.Plan is not null)
+{
+    <section class="card profile-card">
+        <div class="avatar">MT</div>
+        <h2>@TrainingState.Plan.CollaboratorName</h2>
+        <p>@TrainingState.Plan.PositionName</p>
+        <span class="location-line">⌖ @TrainingState.Plan.LocationName</span>
+    </section>
+
+    <section class="card">
+        <h2>Privacidad</h2>
+        <ul class="summary-list">
+            <li>No se solicitan videos.</li>
+            <li>La cámara se usa únicamente para leer el QR.</li>
+            <li>El MVP guarda datos localmente en este navegador.</li>
+        </ul>
+    </section>
+
+    <section class="card danger-zone">
+        <h2>Reiniciar demostración</h2>
+        <p>Elimina el avance local y vuelve a crear las seis validaciones.</p>
+        <button class="button danger full" @onclick="ResetDemo">Restablecer datos</button>
+    </section>
+}
+</div>
+
+@code {
+    private async Task ResetDemo()
+    {
+        await TrainingState.ResetDemoAsync();
+    }
+}

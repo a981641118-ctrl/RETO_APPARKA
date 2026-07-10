@@ -1,0 +1,73 @@
+@page "/entrenamiento"
+@inject TrainingStateService TrainingState
+
+<PageTitle>Mi entrenamiento | Apparka Training</PageTitle>
+
+<div class="page-shell">
+    <section class="page-header">
+        <p class="eyebrow">RUTA PROCEDURAL</p>
+        <h1>Mi entrenamiento</h1>
+        <p>Cada validación habilita la siguiente. No es posible omitir pasos.</p>
+    </section>
+
+@if (TrainingState.Plan is not null)
+{
+    @foreach (var week in TrainingState.Plan.Validations.GroupBy(x => x.Week))
+    {
+        <section class="week-section">
+            <div class="week-title">
+                <span>Semana @week.Key</span>
+                <small>@week.Count(x => x.Status == ValidationStatus.Completed)/2 completadas</small>
+            </div>
+
+            @foreach (var validation in week.OrderBy(x => x.Number))
+            {
+                <article class="validation-card @(validation.Status == ValidationStatus.Locked ? "is-locked" : string.Empty)">
+                    <div class="validation-number">@validation.Number</div>
+                    <div class="validation-content">
+                        <div class="status-line">
+                            <span class="status-badge @CssStatus(validation.Status)">@StatusText(validation.Status)</span>
+                            <span>Vence @validation.DueDate.ToString("dd/MM")</span>
+                        </div>
+                        <h2>@validation.Title</h2>
+                        <p>@validation.Description</p>
+
+                        @if (validation.Status != ValidationStatus.Locked)
+                        {
+                            <a class="button secondary" href="@($"/validacion/{validation.Id}")">
+                                @(validation.Status == ValidationStatus.Completed ? "Ver evidencia" : "Abrir")
+                            </a>
+                        }
+                        else
+                        {
+                            <span class="locked-message">🔒 Completa la validación anterior</span>
+                        }
+                    </div>
+                </article>
+            }
+        </section>
+    }
+}
+</div>
+
+@code {
+    private static string CssStatus(ValidationStatus status) => status switch
+    {
+        ValidationStatus.Available => "available",
+        ValidationStatus.InProgress or ValidationStatus.PendingEvaluation => "progress",
+        ValidationStatus.ReinforcementRequired => "warning",
+        ValidationStatus.Completed => "complete",
+        _ => "locked"
+    };
+
+    private static string StatusText(ValidationStatus status) => status switch
+    {
+        ValidationStatus.Available => "Disponible",
+        ValidationStatus.InProgress => "En proceso",
+        ValidationStatus.PendingEvaluation => "Evaluación pendiente",
+        ValidationStatus.ReinforcementRequired => "Requiere refuerzo",
+        ValidationStatus.Completed => "Completada",
+        ValidationStatus.Expired => "Vencida",
+        _ => "Bloqueada"
+    };
+}

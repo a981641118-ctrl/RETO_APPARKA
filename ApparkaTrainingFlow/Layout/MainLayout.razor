@@ -1,0 +1,46 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject TrainingStateService TrainingState
+
+<div class="app-frame">
+    <header class="top-bar">
+        <div>
+            <span class="brand-mark">A</span>
+            <span class="brand-name">Apparka Training</span>
+        </div>
+        <span class="environment-pill">MVP</span>
+    </header>
+
+    <main class="app-content">
+        @Body
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navegación principal">
+        <NavLink href="/" Match="NavLinkMatch.All">
+            <span class="nav-icon">⌂</span>
+            <span>Inicio</span>
+        </NavLink>
+        <NavLink href="/entrenamiento">
+            <span class="nav-icon">✓</span>
+            <span>Actividad</span>
+        </NavLink>
+        <NavLink href="/supervision">
+            <span class="nav-icon">!</span>
+            <span>Alertas</span>
+        </NavLink>
+        <NavLink href="/perfil">
+            <span class="nav-icon">●</span>
+            <span>Perfil</span>
+        </NavLink>
+    </nav>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        TrainingState.Changed += StateHasChanged;
+        await TrainingState.InitializeAsync();
+    }
+
+    public void Dispose() => TrainingState.Changed -= StateHasChanged;
+}

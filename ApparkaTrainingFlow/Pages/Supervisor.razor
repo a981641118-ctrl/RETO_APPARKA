@@ -1,0 +1,68 @@
+@page "/supervision"
+@inject TrainingStateService TrainingState
+
+<PageTitle>Supervisión | Apparka Training</PageTitle>
+
+<div class="page-shell">
+    <section class="page-header">
+        <p class="eyebrow">GESTIÓN POR EXCEPCIÓN</p>
+        <h1>Panel del supervisor</h1>
+        <p>Solo se muestran casos que requieren intervención.</p>
+    </section>
+
+@if (TrainingState.Plan is not null)
+{
+    var alerts = TrainingState.GetAlerts();
+    var plan = TrainingState.Plan;
+
+    <section class="supervisor-summary">
+        <article class="metric-card">
+            <span>Avance</span>
+            <strong>@plan.ProgressPercentage%</strong>
+            <small>@plan.CompletedCount de 6</small>
+        </article>
+        <article class="metric-card">
+            <span>Alertas</span>
+            <strong>@alerts.Count</strong>
+            <small>Solo excepciones</small>
+        </article>
+    </section>
+
+    @if (alerts.Count == 0)
+    {
+        <section class="card success-card">
+            <span class="large-icon">✓</span>
+            <h2>Sin excepciones pendientes</h2>
+            <p>No necesitas revisar todas las actividades. El sistema alertará cuando exista un caso relevante.</p>
+        </section>
+    }
+    else
+    {
+        <section class="alert-list">
+            @foreach (var alert in alerts)
+            {
+                <article class="card alert-card">
+                    <div class="alert-level">@alert.Severity</div>
+                    <h2>@alert.Title</h2>
+                    <p>@alert.Detail</p>
+                    <a class="button secondary" href="@($"/validacion/{alert.ValidationId}")">Revisar caso</a>
+                </article>
+            }
+        </section>
+    }
+
+    <section class="card">
+        <div class="card-heading-row">
+            <div>
+                <span class="muted">Colaborador activo</span>
+                <strong>@plan.CollaboratorName</strong>
+            </div>
+            <span class="status-badge progress">@plan.Status</span>
+        </div>
+        <div class="meta-grid">
+            <div><span>Sede</span><strong>@plan.LocationName</strong></div>
+            <div><span>Puesto</span><strong>@plan.PositionName</strong></div>
+        </div>
+    </section>
+}
+</div>

@@ -1,0 +1,373 @@
+@page "/validacion/{Id:guid}"
+@inject TrainingStateService TrainingState
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>Validación | Apparka Training</PageTitle>
+
+<div class="page-shell validation-page">
+@if (_loading)
+{
+    <div class="loading-card">Preparando validación...</div>
+}
+else if (_validation is null || TrainingState.Plan is null)
+{
+    <section class="card empty-state">
+        <h1>Validación no encontrada</h1>
+        <a class="button primary" href="/entrenamiento">Volver</a>
+    </section>
+}
+else
+{
+    <section class="page-header compact">
+        <button class="back-button" @onclick="GoBack" aria-label="Volver">‹</button>
+        <div>
+            <p class="eyebrow">SEMANA @_validation.Week · VALIDACIÓN @_validation.Number</p>
+            <h1>@_validation.Title</h1>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="message-banner @(_messageSuccess ? "success" : "error")">@_message</div>
+    }
+
+    @if (_validation.Status == ValidationStatus.Completed)
+    {
+        <section class="card success-card">
+            <span class="large-icon">✓</span>
+            <h2>Evidencia completada</h2>
+            <p>La validación fue cerrada el @_validation.CompletedAt?.ToString("dd/MM/yyyy HH:mm").</p>
+            <div class="evidence-grid">
+                <span>QR validado <strong>✓</strong></span>
+                <span>Tarea ejecutada <strong>✓</strong></span>
+                <span>Rúbrica completa <strong>✓</strong></span>
+                <span>Evaluación @_validation.QuizScore% <strong>✓</strong></span>
+                <span>Tutor confirmó <strong>✓</strong></span>
+                <span>Colaborador confirmó <strong>✓</strong></span>
+            </div>
+            <a class="button primary full" href="/entrenamiento">Ver ruta completa</a>
+        </section>
+
+        <AuditPanel Validation="_validation" />
+    }
+    else if (_validation.Status == ValidationStatus.Locked)
+    {
+        <section class="card empty-state">
+            <span class="large-icon">🔒</span>
+            <h2>Actividad bloqueada</h2>
+            <p>Debes completar la validación anterior para continuar.</p>
+            <a class="button primary" href="/entrenamiento">Revisar ruta</a>
+        </section>
+    }
+    else if (_validation.Status == ValidationStatus.ReinforcementRequired)
+    {
+        <section class="card warning-card">
+            <span class="large-icon">!</span>
+            <h2>Se requiere refuerzo</h2>
+            <p>La evidencia fue registrada, pero existe un criterio crítico o un puntaje menor al mínimo.</p>
+            <ul class="summary-list">
+                <li>Intento actual: @_validation.AttemptNumber</li>
+                <li>Puntaje: @_validation.QuizScore%</li>
+                <li>El supervisor revisará solo esta excepción.</li>
+            </ul>
+            <button class="button primary full" @onclick="BeginReinforcement">Iniciar nuevo intento</button>
+        </section>
+
+        <AuditPanel Validation="_validation" />
+    }
+    else
+    {
+        <section class="stepper" aria-label="Progreso de la validación">
+            @foreach (var step in GetSteps())
+            {
+                <div class="step @step.CssClass">
+                    <span>@step.Number</span>
+                    <small>@step.Label</small>
+                </div>
+            }
+        </section>
+
+        @if (!_validation.QrValidated)
+        {
+            <section class="card procedure-card">
+                <span class="step-kicker">PASO 1 DE 5</span>
+                <h2>Validar ubicación con QR</h2>
+                <p>Escanea el código de la sede. No se almacenan imágenes ni video.</p>
+
+                <video id="qrVideo" class="qr-video" playsinline muted></video>
+
+                <button class="button secondary full" @onclick="ScanWithCamera" disabled="@_busy">
+                    @(_busy ? "Buscando QR..." : "Usar cámara")
+                </button>
+
+                <div class="divider"><span>o ingresa el código de demostración</span></div>
+
+                <label class="field-label" for="qrCode">Código QR</label>
+                <input id="qrCode" class="text-input" @bind="_qrCode" placeholder="APPARKA-SEDE-LIMA-001" />
+                <small class="helper-text">Código válido del MVP: <strong>@TrainingState.Plan.ExpectedQrCode</strong></small>
+
+                <button class="button primary full" @onclick="ValidateQr" disabled="@_busy">Validar QR</button>
+            </section>
+        }
+        else if (!_validation.TaskCompleted)
+        {
+            <section class="card procedure-card">
+                <span class="step-kicker">PASO 2 DE 5</span>
+                <h2>Ejecutar tarea práctica</h2>
+                <p>@_validation.Description</p>
+
+                <div class="instruction-box">
+                    <strong>Instrucción</strong>
+                    <ol>
+                        <li>Realiza la actividad dentro de tu trabajo habitual.</li>
+                        <li>Solicita al tutor que observe el resultado.</li>
+                        <li>No grabes videos ni tomes fotografías del colaborador.</li>
+                    </ol>
+                </div>
+
+                <button class="button primary full" @onclick="CompleteTask">Marcar tarea como ejecutada</button>
+            </section>
+        }
+        else if (!_validation.RubricCompleted || !_rubricSaved)
+        {
+            <section class="card procedure-card">
+                <span class="step-kicker">PASO 3 DE 5 · TUTOR</span>
+                <h2>Rúbrica de desempeño</h2>
+                <p>Evalúa cinco criterios. La observación solo es obligatoria cuando no existe cumplimiento total.</p>
+
+                @foreach (var criterion in _validation.Rubric)
+                {
+                    <div class="rubric-item">
+                        <div class="rubric-title">
+                            <strong>@criterion.Criterion</strong>
+                            @if (criterion.IsCritical)
+                            {
+                                <span class="critical-pill">Crítico</span>
+                            }
+                        </div>
+
+                        <select class="select-input" @bind="criterion.Rating">
+                            <option value="@RubricRating.NotEvaluated">Seleccionar</option>
+                            <option value="@RubricRating.Complies">Cumple</option>
+                            <option value="@RubricRating.PartiallyComplies">Cumple parcialmente</option>
+                            <option value="@RubricRating.DoesNotComply">No cumple</option>
+                        </select>
+
+                        @if (criterion.Rating is RubricRating.PartiallyComplies or RubricRating.DoesNotComply)
+                        {
+                            <textarea class="text-area" @bind="criterion.Observation" placeholder="Describe brevemente el aspecto a reforzar"></textarea>
+                        }
+                    </div>
+                }
+
+                <button class="button primary full" @onclick="SaveRubric">Guardar rúbrica</button>
+            </section>
+        }
+        else if (!_validation.QuizSubmitted)
+        {
+            <section class="card procedure-card">
+                <span class="step-kicker">PASO 4 DE 5</span>
+                <h2>Microevaluación</h2>
+                <p>Responde las tres preguntas. El puntaje mínimo es 70%.</p>
+
+                @for (var questionIndex = 0; questionIndex < _validation.Questions.Count; questionIndex++)
+                {
+                    var question = _validation.Questions[questionIndex];
+                    <fieldset class="question-block">
+                        <legend>@(questionIndex + 1). @question.Text</legend>
+                        @for (var optionIndex = 0; optionIndex < question.Options.Count; optionIndex++)
+                        {
+                            var currentOptionIndex = optionIndex;
+                            var option = question.Options[optionIndex];
+                            <label class="option-row">
+                                <input type="radio"
+                                       name="@($"question-{question.Id}")"
+                                       checked="@(question.SelectedOptionIndex == currentOptionIndex)"
+                                       @onchange="(() => { question.SelectedOptionIndex = currentOptionIndex; })" />
+                                <span>@option</span>
+                            </label>
+                        }
+                    </fieldset>
+                }
+
+                <button class="button primary full" @onclick="SubmitQuiz">Enviar evaluación</button>
+            </section>
+        }
+        else
+        {
+            <section class="card procedure-card">
+                <span class="step-kicker">PASO 5 DE 5</span>
+                <h2>Confirmaciones y cierre</h2>
+                <p>Ambas confirmaciones son obligatorias para generar la evidencia.</p>
+
+                <div class="score-box @(_validation.QuizScore >= 70 ? "passed" : "failed")">
+                    <span>Puntaje de evaluación</span>
+                    <strong>@_validation.QuizScore%</strong>
+                </div>
+
+                <label class="confirmation-row">
+                    <input type="checkbox" checked="@_validation.TutorConfirmed" @onchange="TutorConfirmationChanged" />
+                    <span>
+                        <strong>Confirmación del tutor</strong>
+                        Observé la tarea y registré la evaluación.
+                    </span>
+                </label>
+
+                <label class="confirmation-row">
+                    <input type="checkbox" checked="@_validation.CollaboratorConfirmed" @onchange="CollaboratorConfirmationChanged" />
+                    <span>
+                        <strong>Confirmación del colaborador</strong>
+                        Recibí la retroalimentación correspondiente.
+                    </span>
+                </label>
+
+                <button class="button primary full" @onclick="CloseValidation" disabled="@(!_validation.IsEvidenceComplete)">
+                    Cerrar y generar evidencia
+                </button>
+
+                @if (!_validation.IsEvidenceComplete)
+                {
+                    <small class="helper-text centered">Completa las dos confirmaciones para continuar.</small>
+                }
+            </section>
+        }
+    }
+}
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private TrainingValidation? _validation;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _rubricSaved;
+    private string _qrCode = string.Empty;
+    private string _message = string.Empty;
+    private bool _messageSuccess;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        await TrainingState.InitializeAsync();
+        _validation = TrainingState.GetValidation(Id);
+
+        if (_validation?.Status == ValidationStatus.Available)
+        {
+            await TrainingState.StartValidationAsync(Id);
+        }
+
+        _rubricSaved = _validation?.RubricCompleted == true && _validation.Audit.Any(x => x.Action == "RUBRIC_SAVED");
+        _loading = false;
+    }
+
+    private async Task ScanWithCamera()
+    {
+        _busy = true;
+        ClearMessage();
+        try
+        {
+            var value = await JS.InvokeAsync<string?>("appQr.scanOnce", "qrVideo");
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                _qrCode = value;
+                await ValidateQr();
+            }
+            else
+            {
+                ShowMessage(false, "No se detectó un QR. Puedes ingresar el código manualmente.");
+            }
+        }
+        catch
+        {
+            ShowMessage(false, "La cámara o el lector QR no están disponibles. Usa el ingreso manual.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ValidateQr()
+    {
+        var result = await TrainingState.ValidateQrAsync(Id, _qrCode);
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private async Task CompleteTask()
+    {
+        var result = await TrainingState.CompleteTaskAsync(Id);
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private async Task SaveRubric()
+    {
+        var result = await TrainingState.SaveRubricAsync(Id);
+        _rubricSaved = result.Success;
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private async Task SubmitQuiz()
+    {
+        var result = await TrainingState.SubmitQuizAsync(Id);
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private async Task TutorConfirmationChanged(ChangeEventArgs args)
+    {
+        var value = args.Value is bool boolValue && boolValue;
+        var result = await TrainingState.SetTutorConfirmationAsync(Id, value);
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private async Task CollaboratorConfirmationChanged(ChangeEventArgs args)
+    {
+        var value = args.Value is bool boolValue && boolValue;
+        var result = await TrainingState.SetCollaboratorConfirmationAsync(Id, value);
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private async Task CloseValidation()
+    {
+        var result = await TrainingState.CloseValidationAsync(Id);
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private async Task BeginReinforcement()
+    {
+        var result = await TrainingState.BeginReinforcementAsync(Id);
+        _rubricSaved = false;
+        ShowMessage(result.Success, result.Message);
+    }
+
+    private IEnumerable<StepItem> GetSteps()
+    {
+        if (_validation is null)
+        {
+            return [];
+        }
+
+        return
+        [
+            new(1, "QR", StepClass(_validation.QrValidated, !_validation.QrValidated)),
+            new(2, "Tarea", StepClass(_validation.TaskCompleted, _validation.QrValidated && !_validation.TaskCompleted)),
+            new(3, "Rúbrica", StepClass(_rubricSaved, _validation.TaskCompleted && !_rubricSaved)),
+            new(4, "Evaluación", StepClass(_validation.QuizSubmitted, _rubricSaved && !_validation.QuizSubmitted)),
+            new(5, "Cierre", StepClass(_validation.Status == ValidationStatus.Completed, _validation.QuizSubmitted))
+        ];
+    }
+
+    private static string StepClass(bool complete, bool active) => complete ? "complete" : active ? "active" : "pending";
+
+    private void ShowMessage(bool success, string message)
+    {
+        _messageSuccess = success;
+        _message = message;
+    }
+
+    private void ClearMessage() => _message = string.Empty;
+    private void GoBack() => Navigation.NavigateTo("/entrenamiento");
+
+    private sealed record StepItem(int Number, string Label, string CssClass);
+}

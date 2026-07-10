@@ -1,0 +1,94 @@
+@page "/"
+@inject TrainingStateService TrainingState
+
+<PageTitle>Inicio | Apparka Training</PageTitle>
+
+<div class="page-shell">
+@if (TrainingState.Plan is null)
+{
+    <div class="loading-card">Cargando entrenamiento...</div>
+}
+else
+{
+    var plan = TrainingState.Plan;
+    var current = plan.Validations.FirstOrDefault(x => x.Status is ValidationStatus.Available or ValidationStatus.InProgress or ValidationStatus.PendingEvaluation or ValidationStatus.ReinforcementRequired);
+
+    <section class="welcome-block">
+        <p class="eyebrow">PERIODO DE PRUEBA</p>
+        <h1>Hola, @plan.CollaboratorName.Split(' ')[0]</h1>
+        <p>Completa tu entrenamiento sin grabaciones, siguiendo cada paso obligatorio.</p>
+    </section>
+
+    <section class="card progress-card">
+        <div class="card-heading-row">
+            <div>
+                <span class="muted">Progreso general</span>
+                <strong>@plan.CompletedCount de 6 validaciones</strong>
+            </div>
+            <span class="progress-number">@plan.ProgressPercentage%</span>
+        </div>
+        <div class="progress-track" aria-label="Progreso @plan.ProgressPercentage%">
+            <div class="progress-fill" style="@($"width:{plan.ProgressPercentage}%")"></div>
+        </div>
+        <div class="meta-grid">
+            <div><span>Puesto</span><strong>@plan.PositionName</strong></div>
+            <div><span>Sede</span><strong>@plan.LocationName</strong></div>
+        </div>
+    </section>
+
+    @if (current is not null)
+    {
+        <section class="card action-card">
+            <div class="status-line">
+                <span class="status-badge @CssStatus(current.Status)">@StatusText(current.Status)</span>
+                <span>Semana @current.Week</span>
+            </div>
+            <h2>Validación @current.Number: @current.Title</h2>
+            <p>@current.Description</p>
+            <a class="button primary full" href="@($"/validacion/{current.Id}")">
+                @(current.Status == ValidationStatus.ReinforcementRequired ? "Revisar refuerzo" : "Continuar actividad")
+            </a>
+        </section>
+    }
+    else if (plan.Status == PlanStatus.Completed)
+    {
+        <section class="card success-card">
+            <span class="large-icon">✓</span>
+            <h2>Entrenamiento completado</h2>
+            <p>Las seis validaciones fueron cerradas correctamente.</p>
+        </section>
+    }
+
+    <section class="quick-stats">
+        <article class="mini-card">
+            <span class="mini-icon">3</span>
+            <div><strong>Semanas</strong><span>Duración total</span></div>
+        </article>
+        <article class="mini-card">
+            <span class="mini-icon">6</span>
+            <div><strong>Evidencias</strong><span>Sin videos</span></div>
+        </article>
+    </section>
+}
+</div>
+
+@code {
+    private static string CssStatus(ValidationStatus status) => status switch
+    {
+        ValidationStatus.Available => "available",
+        ValidationStatus.InProgress or ValidationStatus.PendingEvaluation => "progress",
+        ValidationStatus.ReinforcementRequired => "warning",
+        ValidationStatus.Completed => "complete",
+        _ => "locked"
+    };
+
+    private static string StatusText(ValidationStatus status) => status switch
+    {
+        ValidationStatus.Available => "Disponible",
+        ValidationStatus.InProgress => "En proceso",
+        ValidationStatus.PendingEvaluation => "Evaluación pendiente",
+        ValidationStatus.ReinforcementRequired => "Requiere refuerzo",
+        ValidationStatus.Completed => "Completada",
+        _ => "Bloqueada"
+    };
+}
